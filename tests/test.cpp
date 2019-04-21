@@ -24,6 +24,6 @@ TEST(BASIC, auto_stop_in_destructor) {
 TEST(BASIC, delay_not_causes_lock) {
     auto server = std::make_shared<TunnelServer>(service, GetConfig(1));
     server->Start();
-    sleep(10);
+    sleep(1);
     server->Stop();
 }
