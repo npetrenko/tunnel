@@ -3,7 +3,7 @@
 #include <thread>
 #include <memory>
 #include <mutex>
-#include <shared_mutex>
+#include <condition_variable>
 
 struct ServerConfig {
     boost::asio::ip::tcp::endpoint my_end;
@@ -20,6 +20,8 @@ public:
 
     void Start();
     void Stop();
+    // Mostly convenience function: just to ensure that output is not garbage
+    void WaitStart();
 
     TunnelServer(const TunnelServer&) = delete;
     TunnelServer& operator=(const TunnelServer&) = delete;
@@ -27,4 +29,7 @@ public:
 private:
     std::shared_ptr<TunnelServerImpl> impl_;
     std::vector<std::thread> workers_;
+    std::mutex mut_;
+    std::condition_variable cv_;
+    int num_to_start_;
 };

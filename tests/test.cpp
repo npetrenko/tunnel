@@ -63,6 +63,36 @@ TEST(Threaded, delay_not_causes_lock) {
     }
 }
 
+TEST(MultiConn, DISABLED_does_not_hang_on_multiple_connections) {
+    auto server_config = GetConfig(1);
+    auto server = std::make_shared<TunnelServer>(service, server_config);
+
+    boost::asio::io_service serv;
+    auto addr = boost::asio::ip::make_address("127.0.0.1");
+    boost::asio::ip::tcp::acceptor acceptor(serv, {addr, 10001});
+    acceptor.listen();
+
+    std::vector<boost::asio::ip::tcp::socket> sockets;
+    std::vector<boost::asio::ip::tcp::socket> accepteds;
+    std::thread accept_thread([&] {
+        for (int i = 0; i < 100; ++i) {
+            try {
+                accepteds.emplace_back(acceptor.accept());
+            } catch(...) {
+		std::cerr << "Whoops\n";
+	    }
+        }
+    });
+
+    usleep(100);
+    for (unsigned short i = 12000; i < 12100;  ++i) {
+        sockets.emplace_back(serv);
+	sockets.back().connect(server_config.my_end);
+    }
+
+    accept_thread.join();
+}
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     google::InitGoogleLogging(argv[0]);

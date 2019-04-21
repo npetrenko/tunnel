@@ -27,8 +27,8 @@ add_library(tunnelserver "${SRC_DIR}/server.cpp")
 target_include_directories(tunnelserver PUBLIC ./)
 target_link_libraries(tunnelserver ${Boost_LIBS} glog::glog)
 
-add_executable(main "${SRC_DIR}/main.cpp")
-target_link_libraries(main tunnelserver)
+add_executable(runserver "${SRC_DIR}/main.cpp")
+target_link_libraries(runserver tunnelserver)
 
 add_executable(tests "${TEST_DIR}/test.cpp")
 target_include_directories(tests PUBLIC)
