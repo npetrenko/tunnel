@@ -32,6 +32,6 @@ target_link_libraries(main tunnelserver)
 
 add_executable(tests "${TEST_DIR}/test.cpp")
 target_include_directories(tests PUBLIC)
-target_link_libraries(tests glog::glog gtest gtest_main tunnelserver)
+target_link_libraries(tests glog::glog gtest tunnelserver)
 
 add_test(tests tests)

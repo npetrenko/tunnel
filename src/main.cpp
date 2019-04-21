@@ -1,6 +1,7 @@
 #include <src/server.hpp>
 #include <boost/asio.hpp>
 #include <gflags/gflags.h>
+#include <glog/logging.h>
 
 DEFINE_string(src_addr, "127.0.0.1", "IP address to listen on");
 DEFINE_int32(src_port, 10000, "Port to listen on");
@@ -40,6 +41,9 @@ DEFINE_validator(dest_port, ValidatePort);
 DEFINE_validator(num_threads, ValidateThreads);
 
 int main(int argc, char** argv) {
+    google::InitGoogleLogging(argv[0]);
+    google::LogToStderr();
+    
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     boost::asio::io_service service;

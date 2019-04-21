@@ -26,7 +26,7 @@ private:
     boost::asio::io_service& service_;
     boost::asio::ip::tcp::acceptor acceptor_;
     std::atomic<bool> is_stopped_{false};
-    std::shared_mutex mut_;
+    std::mutex mut_;
 };
 
 TunnelServer::TunnelServer(boost::asio::io_service& service, ServerConfig config) {
@@ -35,8 +35,8 @@ TunnelServer::TunnelServer(boost::asio::io_service& service, ServerConfig config
 
 TunnelServer::~TunnelServer() {
     impl_.reset();
-    for (auto& worker: workers_) {
-	worker.join();
+    for (auto& worker : workers_) {
+        worker.join();
     }
 }
 
@@ -73,7 +73,7 @@ void TunnelServerImpl::Start() {
 }
 
 void TunnelServerImpl::Stop() {
-    std::unique_lock lock(mut_);
+    std::lock_guard lock(mut_);
     if (!is_stopped_.exchange(true)) {
         LOG(INFO) << "Stopping server";
         if (acceptor_.is_open()) {
@@ -89,7 +89,7 @@ TunnelServerImpl::~TunnelServerImpl() {
 
 using namespace asio::ip;
 void TunnelServerImpl::Listen() {
-    std::shared_lock guard(mut_);
+    std::lock_guard guard(mut_);
     if (is_stopped_.load()) {
         return;
     }
@@ -101,8 +101,8 @@ void TunnelServerImpl::Listen() {
     acceptor_.async_accept(std::bind(&TunnelServerImpl::AsyncAccept, shared_from_this(), _1, _2));
 }
 
-void TunnelServerImpl::AsyncAccept(const boost::system::error_code &ec,
-                               boost::asio::ip::tcp::socket sock) {
+void TunnelServerImpl::AsyncAccept(const boost::system::error_code& ec,
+                                   boost::asio::ip::tcp::socket sock) {
     if (ec) {
         LOG(INFO) << ec.message();
         return;
@@ -112,34 +112,46 @@ void TunnelServerImpl::AsyncAccept(const boost::system::error_code &ec,
     asio::post(service_, [conn = std::move(conn), me = shared_from_this()]() mutable {
         me->HandleConnection(std::move(conn));
     });
+
     try {
-        std::shared_lock guard(mut_);
         using namespace std::placeholders;
-        acceptor_.async_accept(std::bind(&TunnelServerImpl::AsyncAccept, shared_from_this(), _1, _2));
+        std::lock_guard guard(mut_);
+        acceptor_.async_accept(
+            std::bind(&TunnelServerImpl::AsyncAccept, shared_from_this(), _1, _2));
     } catch (boost::wrapexcept<boost::system::system_error>& e) {
         LOG(INFO) << e.what();
     }
 }
 
-void TunnelServerImpl::HandleConnection(std::shared_ptr<tcp::socket> &&conn) {
+void TunnelServerImpl::HandleConnection(std::shared_ptr<tcp::socket>&& conn) {
     auto create_one_way_channel_handler = [](std::shared_ptr<tcp::socket> from,
                                              std::shared_ptr<tcp::socket> to) {
         return [from = std::move(from), to = std::move(to)] {
             std::string buffer(1024, 0);
-            while (true) {
-                size_t size = from->read_some(boost::asio::buffer(buffer));
-                {
-                    boost::asio::const_buffer view(buffer.data(), size);
-                    while (view.size()) {
-                        view += to->write_some(view);
+            try {
+                while (true) {
+                    size_t size = from->read_some(boost::asio::buffer(buffer));
+                    {
+                        boost::asio::const_buffer view(buffer.data(), size);
+                        while (view.size()) {
+                            view += to->write_some(view);
+                        }
                     }
                 }
+            } catch (boost::wrapexcept<boost::system::system_error>& e) {
+                LOG(INFO) << e.what();
+		return;
             }
         };
     };
 
     auto to_conn = std::make_shared<tcp::socket>(service_);
-    to_conn->connect(config_.other_end);
+    try {
+        to_conn->connect(config_.other_end);
+    } catch (boost::wrapexcept<boost::system::system_error>& e) {
+        LOG(INFO) << e.what();
+        return;
+    }
 
     asio::post(service_, create_one_way_channel_handler(conn, to_conn));
     asio::dispatch(service_, create_one_way_channel_handler(std::move(to_conn), std::move(conn)));
